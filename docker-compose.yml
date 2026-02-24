@@ -21,13 +21,13 @@ services:
         max-file: "3"
 
   grafana:
-    image: grafana/grafana:11.4.0
+    build: ./grafana
+    image: ghcr.io/0xc3b6/marketsentinel-grafana:latest
     container_name: market-sentinel-grafana
     restart: unless-stopped
     ports:
       - "4321:3000"
     environment:
-      - GF_INSTALL_PLUGINS=frser-sqlite-datasource
       - GF_SECURITY_ADMIN_PASSWORD=admin
     volumes:
       - ./data:/data:ro
