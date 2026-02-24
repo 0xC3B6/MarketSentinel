@@ -1,0 +1,20 @@
+services:
+  market-sentinel:
+    build: .
+    container_name: market-sentinel
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+      - ./configs/config.yaml:/app/configs/config.yaml:ro
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: "0.5"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

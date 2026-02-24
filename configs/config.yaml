@@ -1,0 +1,19 @@
+telegram:
+  bot_token: ""
+  chat_id: ""
+
+data_source:
+  base_url: ""
+  api_key: ""
+  symbol: "SPX500"
+
+schedule:
+  weekly_cron: "0 0 8 * * 1"      # 每周一8点
+  daily_cron: "0 0 22 * * 1-5"    # 交易日22点检查
+  monthly_cron: "0 0 9 1 * *"     # 每月1号9点
+
+fund:
+  monthly_budget: 10000
+  state_file: "data/fund_state.json"
+
+proxy: ""
