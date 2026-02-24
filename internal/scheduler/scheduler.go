@@ -9,6 +9,7 @@ import (
 	"MarketSentinel/internal/fund"
 	"MarketSentinel/internal/model"
 	"MarketSentinel/internal/notifier"
+	"MarketSentinel/internal/recorder"
 	"MarketSentinel/internal/strategy"
 
 	"github.com/robfig/cron/v3"
@@ -20,16 +21,18 @@ type Scheduler struct {
 	Collector *collector.Collector
 	Fund      *fund.Manager
 	Notifier  *notifier.TelegramNotifier
+	Recorder  recorder.Recorder
 	Ctx       context.Context
 }
 
 // NewScheduler creates a new Scheduler.
-func NewScheduler(ctx context.Context, col *collector.Collector, fm *fund.Manager, tn *notifier.TelegramNotifier) *Scheduler {
+func NewScheduler(ctx context.Context, col *collector.Collector, fm *fund.Manager, tn *notifier.TelegramNotifier, rec recorder.Recorder) *Scheduler {
 	return &Scheduler{
 		Cron:      cron.New(cron.WithSeconds()),
 		Collector: col,
 		Fund:      fm,
 		Notifier:  tn,
+		Recorder:  rec,
 		Ctx:       ctx,
 	}
 }
@@ -91,6 +94,7 @@ func (s *Scheduler) weeklyTask() {
 	state := s.Fund.GetState()
 	signal.BaseAmount = state.WeeklyBaseN
 
+	stateBefore := s.Fund.GetState()
 	finalAmount, reserveUsed := s.Fund.CalculateWeeklyInvestment(signal)
 	signal.FinalAmount = finalAmount
 	signal.ReserveUsed = reserveUsed
@@ -102,6 +106,16 @@ func (s *Scheduler) weeklyTask() {
 	report += "\n" + notifier.FormatFundStatus(&updatedState)
 
 	s.trySend(report)
+
+	// Record to SQLite
+	if err := s.Recorder.RecordWeekly(&recorder.WeeklySnapshot{
+		Indicators: ind,
+		Signal:     signal,
+		FundState:  &updatedState,
+	}); err != nil {
+		log.Printf("[ERROR] record weekly: %v", err)
+	}
+	s.recordFundEvent("WEEKLY", &stateBefore, &updatedState, finalAmount+reserveUsed, "周定投")
 }
 
 func (s *Scheduler) dailyCheck() {
@@ -115,11 +129,21 @@ func (s *Scheduler) dailyCheck() {
 	// Bottom-fish trigger: daily RSI < 30
 	if ind.DailyRSI < 30 {
 		signal := strategy.Evaluate(ind)
+		stateBefore := s.Fund.GetState()
 		amount, triggered := s.Fund.CalculateBottomFishInvestment(signal.TotalScore)
 		if triggered {
 			msg := fmt.Sprintf("🎣 <b>抄底触发</b> | 日线RSI=%.0f\n\n综合评分: %+.3f\n抄底金额: ¥%.0f (储备池)\n",
 				ind.DailyRSI, signal.TotalScore, amount)
 			s.trySend(msg)
+
+			stateAfter := s.Fund.GetState()
+			if err := s.Recorder.RecordDailyCheck(&recorder.DailyCheckEvent{
+				DailyRSI: ind.DailyRSI, WeeklyRSI: ind.WeeklyRSI, Price: ind.CurrentPrice,
+				EventType: "BOTTOM_FISH", Amount: amount, TotalScore: signal.TotalScore,
+			}); err != nil {
+				log.Printf("[ERROR] record daily check: %v", err)
+			}
+			s.recordFundEvent("BOTTOM_FISH", &stateBefore, &stateAfter, amount, "抄底触发")
 		}
 	}
 
@@ -128,23 +152,70 @@ func (s *Scheduler) dailyCheck() {
 		msg := fmt.Sprintf("⚠️ <b>止盈预警</b>\n\n日线RSI: %.0f | 周线RSI: %.0f\n当前价格: %.2f\n建议考虑部分止盈",
 			ind.DailyRSI, ind.WeeklyRSI, ind.CurrentPrice)
 		s.trySend(msg)
+
+		if err := s.Recorder.RecordDailyCheck(&recorder.DailyCheckEvent{
+			DailyRSI: ind.DailyRSI, WeeklyRSI: ind.WeeklyRSI, Price: ind.CurrentPrice,
+			EventType: "TAKE_PROFIT",
+		}); err != nil {
+			log.Printf("[ERROR] record daily check: %v", err)
+		}
 	}
 }
 
 func (s *Scheduler) monthlyTask() {
 	log.Println("[INFO] running monthly task")
+	stateBefore := s.Fund.GetState()
 	s.Fund.MonthlyReplenish()
 	state := s.Fund.GetState()
 	report := notifier.FormatMonthlySummary(&state)
 	s.trySend(report)
+
+	budget := state.MonthlyBudget
+	regularAdded := budget * 0.7
+	reserveAdded := budget * 0.3
+	var avgScore float64
+	if len(state.RecentScores) > 0 {
+		sum := 0.0
+		for _, sc := range state.RecentScores {
+			sum += sc
+		}
+		avgScore = sum / float64(len(state.RecentScores))
+	}
+	if err := s.Recorder.RecordMonthly(&recorder.MonthlyEvent{
+		RegularAdded: regularAdded, ReserveAdded: reserveAdded,
+		RegularAfter: state.RegularBalance, ReserveAfter: state.ReserveBalance,
+		AvgScore: avgScore,
+	}); err != nil {
+		log.Printf("[ERROR] record monthly: %v", err)
+	}
+	s.recordFundEvent("MONTHLY", &stateBefore, &state, budget, "月度补充")
 }
 
 func (s *Scheduler) quarterlyTask() {
 	log.Println("[INFO] running quarterly rebalance")
+	stateBefore := s.Fund.GetState()
 	result := s.Fund.QuarterlyRebalance()
 	state := s.Fund.GetState()
 	msg := fmt.Sprintf("📊 <b>季度再平衡</b>\n\n%s\n\n%s", result, notifier.FormatFundStatus(&state))
 	s.trySend(msg)
+
+	action := "NO_ACTION"
+	var amount float64
+	if state.ReserveBalance < stateBefore.ReserveBalance {
+		action = "TRANSFER_EXCESS"
+		amount = stateBefore.ReserveBalance - state.ReserveBalance
+	} else if state.ReserveBalance > stateBefore.ReserveBalance {
+		action = "EMERGENCY_TOPUP"
+		amount = state.ReserveBalance - stateBefore.ReserveBalance
+	}
+	if err := s.Recorder.RecordQuarterly(&recorder.QuarterlyEvent{
+		Action: action, Amount: amount,
+		RegularAfter: state.RegularBalance, ReserveAfter: state.ReserveBalance,
+		Note: result,
+	}); err != nil {
+		log.Printf("[ERROR] record quarterly: %v", err)
+	}
+	s.recordFundEvent("QUARTERLY", &stateBefore, &state, amount, "季度再平衡")
 }
 
 // HandleCommand processes a user command and returns a reply.
@@ -161,6 +232,20 @@ func (s *Scheduler) HandleCommand(command string) string {
 		return notifier.FormatMonthlySummary(&state)
 	default:
 		return "可用命令:\n• 查看本周建议\n• 查看资金状态\n• 查看月报"
+	}
+}
+
+func (s *Scheduler) recordFundEvent(eventType string, before, after *model.FundState, amount float64, note string) {
+	if err := s.Recorder.RecordFundEvent(&recorder.FundEvent{
+		EventType:     eventType,
+		RegularBefore: before.RegularBalance,
+		RegularAfter:  after.RegularBalance,
+		ReserveBefore: before.ReserveBalance,
+		ReserveAfter:  after.ReserveBalance,
+		Amount:        amount,
+		Note:          note,
+	}); err != nil {
+		log.Printf("[ERROR] record fund event: %v", err)
 	}
 }
 

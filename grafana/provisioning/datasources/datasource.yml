@@ -1,0 +1,11 @@
+apiVersion: 1
+
+datasources:
+  - name: MarketSentinel
+    type: frser-sqlite-datasource
+    uid: market-sentinel-sqlite
+    access: proxy
+    isDefault: true
+    editable: false
+    jsonData:
+      path: /data/market_sentinel.db

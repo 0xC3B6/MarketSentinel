@@ -16,4 +16,7 @@ fund:
   monthly_budget: 10000
   state_file: "data/fund_state.json"
 
+database:
+  sqlite_path: "data/market_sentinel.db"
+
 proxy: ""

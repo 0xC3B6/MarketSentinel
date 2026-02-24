@@ -1,0 +1,289 @@
+{
+  "uid": "market-sentinel",
+  "title": "MarketSentinel Dashboard",
+  "tags": ["market-sentinel"],
+  "timezone": "browser",
+  "refresh": "1h",
+  "time": {
+    "from": "now-90d",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "价格 + 均线",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "lineWidth": 2,
+            "pointSize": 4,
+            "showPoints": "auto"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "ma200" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "ma20w" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "blue", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "ma50w" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "purple", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "current_price" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }]
+          }
+        ]
+      },
+      "datasource": { "type": "frser-sqlite-datasource", "uid": "market-sentinel-sqlite" },
+      "targets": [
+        {
+          "rawSql": "SELECT timestamp as time, current_price, ma200, ma20w, ma50w FROM weekly_snapshots ORDER BY timestamp",
+          "refId": "A",
+          "format": "time_series"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "RSI 指标",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "min": 0,
+          "max": 100,
+          "custom": {
+            "lineWidth": 2,
+            "pointSize": 4,
+            "showPoints": "auto",
+            "thresholdsStyle": { "mode": "line" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 30 },
+              { "color": "orange", "value": 85 }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "weekly_rsi" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "blue", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "daily_rsi" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "cyan", "mode": "fixed" } }]
+          }
+        ]
+      },
+      "datasource": { "type": "frser-sqlite-datasource", "uid": "market-sentinel-sqlite" },
+      "targets": [
+        {
+          "rawSql": "SELECT timestamp as time, weekly_rsi, daily_rsi FROM weekly_snapshots ORDER BY timestamp",
+          "refId": "A",
+          "format": "time_series"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "因子评分",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "lineWidth": 2,
+            "pointSize": 4,
+            "showPoints": "auto"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "MA200偏离" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "周线RSI" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "blue", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "日线RSI" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "cyan", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "52周位置" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "趋势追踪" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "purple", "mode": "fixed" } }]
+          }
+        ]
+      },
+      "datasource": { "type": "frser-sqlite-datasource", "uid": "market-sentinel-sqlite" },
+      "targets": [
+        {
+          "rawSql": "SELECT timestamp as time, factor1_score as 'MA200偏离', factor2_score as '周线RSI', factor3_score as '日线RSI', factor4_score as '52周位置', factor5_score as '趋势追踪' FROM weekly_snapshots ORDER BY timestamp",
+          "refId": "A",
+          "format": "time_series"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "综合评分趋势",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "always",
+            "thresholdsStyle": { "mode": "line+area" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "dark-red", "value": null },
+              { "color": "red", "value": -1.5 },
+              { "color": "orange", "value": -0.8 },
+              { "color": "yellow", "value": 0 },
+              { "color": "light-green", "value": 0.8 },
+              { "color": "green", "value": 1.2 },
+              { "color": "dark-green", "value": 1.5 }
+            ]
+          },
+          "color": { "mode": "fixed", "fixedColor": "white" }
+        },
+        "overrides": []
+      },
+      "datasource": { "type": "frser-sqlite-datasource", "uid": "market-sentinel-sqlite" },
+      "targets": [
+        {
+          "rawSql": "SELECT timestamp as time, total_score FROM weekly_snapshots ORDER BY timestamp",
+          "refId": "A",
+          "format": "time_series"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "资金池变化",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyCNY",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 30,
+            "stacking": { "mode": "normal", "group": "A" },
+            "showPoints": "auto"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "regular_balance" },
+            "properties": [
+              { "id": "displayName", "value": "常规池" },
+              { "id": "color", "value": { "fixedColor": "blue", "mode": "fixed" } }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "reserve_balance" },
+            "properties": [
+              { "id": "displayName", "value": "储备池" },
+              { "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }
+            ]
+          }
+        ]
+      },
+      "datasource": { "type": "frser-sqlite-datasource", "uid": "market-sentinel-sqlite" },
+      "targets": [
+        {
+          "rawSql": "SELECT timestamp as time, regular_balance, reserve_balance FROM weekly_snapshots ORDER BY timestamp",
+          "refId": "A",
+          "format": "time_series"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "周投入金额",
+      "type": "barchart",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyCNY",
+          "custom": {
+            "stacking": { "mode": "normal", "group": "A" }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "final_amount" },
+            "properties": [
+              { "id": "displayName", "value": "常规投入" },
+              { "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "reserve_used" },
+            "properties": [
+              { "id": "displayName", "value": "储备投入" },
+              { "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }
+            ]
+          }
+        ]
+      },
+      "datasource": { "type": "frser-sqlite-datasource", "uid": "market-sentinel-sqlite" },
+      "targets": [
+        {
+          "rawSql": "SELECT timestamp as time, final_amount, reserve_used FROM weekly_snapshots ORDER BY timestamp",
+          "refId": "A",
+          "format": "time_series"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "事件日志",
+      "type": "table",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 24 },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "time" },
+            "properties": [{ "id": "unit", "value": "dateTimeFromNow" }]
+          }
+        ]
+      },
+      "datasource": { "type": "frser-sqlite-datasource", "uid": "market-sentinel-sqlite" },
+      "targets": [
+        {
+          "rawSql": "SELECT timestamp as time, event_type, daily_rsi, weekly_rsi, price, amount, total_score FROM daily_checks ORDER BY timestamp DESC LIMIT 50",
+          "refId": "A",
+          "format": "table"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "version": 1
+}

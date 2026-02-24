@@ -27,6 +27,9 @@ type Config struct {
 		MonthlyBudget float64 `yaml:"monthly_budget"`
 		StateFile     string  `yaml:"state_file"`
 	} `yaml:"fund"`
+	Database struct {
+		SQLitePath string `yaml:"sqlite_path"`
+	} `yaml:"database"`
 	Proxy string `yaml:"proxy"`
 }
 
@@ -69,6 +72,9 @@ func Load(path string) (*Config, error) {
 	if v := os.Getenv("CRON_WEEKLY"); v != "" {
 		cfg.Schedule.WeeklyCron = v
 	}
+	if v := os.Getenv("SQLITE_PATH"); v != "" {
+		cfg.Database.SQLitePath = v
+	}
 
 	// Defaults
 	if cfg.DataSource.Symbol == "" {
@@ -88,6 +94,9 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.Fund.StateFile == "" {
 		cfg.Fund.StateFile = "data/fund_state.json"
+	}
+	if cfg.Database.SQLitePath == "" {
+		cfg.Database.SQLitePath = "data/market_sentinel.db"
 	}
 
 	return cfg, nil
