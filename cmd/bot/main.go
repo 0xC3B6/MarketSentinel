@@ -33,8 +33,13 @@ func main() {
 	}
 
 	// Init fetcher
-	fetcher := collector.NewVsTraderFetcher(cfg.DataSource.BaseURL, cfg.DataSource.APIKey, cfg.Proxy)
-	log.Printf("[INFO] data source: %s (%s)", fetcher.Name(), cfg.DataSource.BaseURL)
+	var fetcher collector.Fetcher
+	if cfg.DataSource.BaseURL != "" {
+		fetcher = collector.NewVsTraderFetcher(cfg.DataSource.BaseURL, cfg.DataSource.APIKey, cfg.Proxy)
+	} else {
+		fetcher = collector.NewYahooFetcher(cfg.Proxy)
+	}
+	log.Printf("[INFO] data source: %s", fetcher.Name())
 
 	// Init collector
 	col := collector.NewCollector(fetcher, cfg.DataSource.Symbol)

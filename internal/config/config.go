@@ -110,9 +110,6 @@ func (c *Config) Validate() error {
 	if c.Telegram.ChatID == "" {
 		return fmt.Errorf("telegram.chat_id is required")
 	}
-	if c.DataSource.BaseURL == "" {
-		return fmt.Errorf("data_source.base_url is required")
-	}
 	if c.Fund.MonthlyBudget <= 0 {
 		return fmt.Errorf("fund.monthly_budget must be positive")
 	}
