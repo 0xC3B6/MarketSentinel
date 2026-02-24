@@ -25,7 +25,7 @@ services:
     container_name: market-sentinel-grafana
     restart: unless-stopped
     ports:
-      - "3001:3000"
+      - "4321:3000"
     environment:
       - GF_INSTALL_PLUGINS=frser-sqlite-datasource
       - GF_SECURITY_ADMIN_PASSWORD=admin
