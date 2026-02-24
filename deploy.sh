@@ -12,7 +12,7 @@ cd "$PROJECT_DIR"
 
 # 1. 拉取最新镜像
 echo "📥 正在从 GHCR 拉取最新镜像..."
-docker compose pull market-sentinel
+docker compose pull
 
 # 2. 重启服务（保留 grafana 不动）
 echo "🐳 正在平滑重启服务..."
