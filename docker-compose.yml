@@ -1,5 +1,6 @@
 services:
   market-sentinel:
+    image: ghcr.io/0xc3b6/marketsentinel:latest
     build: .
     container_name: market-sentinel
     restart: unless-stopped
