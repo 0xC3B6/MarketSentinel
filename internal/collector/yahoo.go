@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"sort"
@@ -88,61 +89,78 @@ func (f *YahooFetcher) fetchChart(symbol, interval, rng string) ([]model.OHLCV, 
 	u := fmt.Sprintf("https://query1.finance.yahoo.com/v8/finance/chart/%s?interval=%s&range=%s",
 		url.PathEscape(f.yahooSymbol(symbol)), interval, rng)
 
-	req, err := http.NewRequest("GET", u, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", "Mozilla/5.0")
-
-	resp, err := f.Client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("yahoo fetch: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("yahoo read body: %w", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("yahoo: status %d, body: %s", resp.StatusCode, string(body))
-	}
-
-	var chart yahooChart
-	if err := json.Unmarshal(body, &chart); err != nil {
-		return nil, fmt.Errorf("yahoo decode: %w", err)
-	}
-	if chart.Chart.Error != nil {
-		return nil, fmt.Errorf("yahoo api error: %s", chart.Chart.Error.Description)
-	}
-	if len(chart.Chart.Result) == 0 || len(chart.Chart.Result[0].Timestamp) == 0 {
-		return nil, fmt.Errorf("yahoo: no data returned")
-	}
-
-	result := chart.Chart.Result[0]
-	quote := result.Indicators.Quote[0]
-	bars := make([]model.OHLCV, 0, len(result.Timestamp))
-
-	for i, ts := range result.Timestamp {
-		o := toFloat(quote.Open[i])
-		h := toFloat(quote.High[i])
-		l := toFloat(quote.Low[i])
-		c := toFloat(quote.Close[i])
-		if o == 0 && h == 0 && l == 0 && c == 0 {
-			continue // skip null bars (holidays etc.)
+	var lastErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		if attempt > 0 {
+			wait := time.Duration(attempt*5) * time.Second
+			log.Printf("[INFO] yahoo: retrying in %v (attempt %d/3)", wait, attempt+1)
+			time.Sleep(wait)
 		}
-		bars = append(bars, model.OHLCV{
-			Time:   time.Unix(ts, 0),
-			Open:   o,
-			High:   h,
-			Low:    l,
-			Close:  c,
-			Volume: toFloat(quote.Volume[i]),
-		})
-	}
 
-	sort.Slice(bars, func(i, j int) bool { return bars[i].Time.Before(bars[j].Time) })
-	return bars, nil
+		req, err := http.NewRequest("GET", u, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("User-Agent", "Mozilla/5.0")
+
+		resp, err := f.Client.Do(req)
+		if err != nil {
+			lastErr = fmt.Errorf("yahoo fetch: %w", err)
+			continue
+		}
+
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			lastErr = fmt.Errorf("yahoo read body: %w", err)
+			continue
+		}
+
+		if resp.StatusCode == 429 {
+			lastErr = fmt.Errorf("yahoo: rate limited (429)")
+			continue
+		}
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("yahoo: status %d, body: %s", resp.StatusCode, string(body))
+		}
+
+		var chart yahooChart
+		if err := json.Unmarshal(body, &chart); err != nil {
+			return nil, fmt.Errorf("yahoo decode: %w", err)
+		}
+		if chart.Chart.Error != nil {
+			return nil, fmt.Errorf("yahoo api error: %s", chart.Chart.Error.Description)
+		}
+		if len(chart.Chart.Result) == 0 || len(chart.Chart.Result[0].Timestamp) == 0 {
+			return nil, fmt.Errorf("yahoo: no data returned")
+		}
+
+		result := chart.Chart.Result[0]
+		quote := result.Indicators.Quote[0]
+		bars := make([]model.OHLCV, 0, len(result.Timestamp))
+
+		for i, ts := range result.Timestamp {
+			o := toFloat(quote.Open[i])
+			h := toFloat(quote.High[i])
+			l := toFloat(quote.Low[i])
+			c := toFloat(quote.Close[i])
+			if o == 0 && h == 0 && l == 0 && c == 0 {
+				continue
+			}
+			bars = append(bars, model.OHLCV{
+				Time:   time.Unix(ts, 0),
+				Open:   o,
+				High:   h,
+				Low:    l,
+				Close:  c,
+				Volume: toFloat(quote.Volume[i]),
+			})
+		}
+
+		sort.Slice(bars, func(i, j int) bool { return bars[i].Time.Before(bars[j].Time) })
+		return bars, nil
+	}
+	return nil, lastErr
 }
 
 func (f *YahooFetcher) FetchDailyBars(symbol string, days int) ([]model.OHLCV, error) {
