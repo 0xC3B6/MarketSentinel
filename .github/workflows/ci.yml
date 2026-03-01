@@ -6,10 +6,6 @@ on:
   pull_request:
     branches: [master]
 
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
-
 jobs:
   lint-and-build:
     runs-on: ubuntu-latest
@@ -32,62 +28,9 @@ jobs:
       - name: Build
         run: CGO_ENABLED=0 go build -o /dev/null ./cmd/bot
 
-  docker-publish:
-    runs-on: ubuntu-latest
-    needs: lint-and-build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-    permissions:
-      contents: read
-      packages: write
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Login to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=raw,value=latest
-            type=sha,prefix=
-
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-
-      - name: Extract Grafana metadata
-        id: grafana-meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-grafana
-          tags: |
-            type=raw,value=latest
-            type=sha,prefix=
-
-      - name: Build and push Grafana image
-        uses: docker/build-push-action@v6
-        with:
-          context: ./grafana
-          push: true
-          tags: ${{ steps.grafana-meta.outputs.tags }}
-          labels: ${{ steps.grafana-meta.outputs.labels }}
-
   deploy:
     runs-on: ubuntu-latest
-    needs: docker-publish
+    needs: lint-and-build
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
 
     steps:
